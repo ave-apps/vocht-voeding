@@ -718,6 +718,22 @@ function uid() { return Math.random().toString(36).slice(2,9); }
 function iconFor(id) { return ICONS.find(i=>i.id===id); }
 
 // ══════ BUILD TRAY ═══════════════════════════════════════════════
+function updateDragGhostMulti() {
+  dragGhostEl.innerHTML = '';
+  dragGhostEl.style.fontSize = '22px';
+  const icons = ICONS.filter(i => selectedIcons.has(i.id));
+  if(icons.length === 0 && dragIconId && dragIconId !== '__multi__') {
+    const ic = iconFor(dragIconId);
+    if(ic) dragGhostEl.innerHTML = ic.icon;
+  } else {
+    icons.forEach(ic => {
+      const span = document.createElement('span');
+      span.textContent = ic.icon;
+      dragGhostEl.appendChild(span);
+    });
+  }
+}
+
 function buildTray() {
   const rows = { warm: document.getElementById('tray-warm'), cold: document.getElementById('tray-cold'), food: document.getElementById('tray-food') };
   // labels
