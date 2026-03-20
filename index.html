@@ -2014,6 +2014,7 @@ function toggleBulkSelect(regId) {
 }
 
 function confirmBulkDelete() {
+  console.log('[bulk] confirmBulkDelete called, size:', bulkSelected.size);
   if(bulkSelected.size === 0) return;
   const n = bulkSelected.size;
   try { bulkSelected.forEach(id => deletedIds.add(id)); saveDeletedIds(); } catch(e) {}
@@ -2025,43 +2026,17 @@ function confirmBulkDelete() {
 }
 
 // Verwijder alle registraties van huidige dag
-let _deleteDayArmed = false;
-let _deleteDayTimer = null;
 function deleteDay() {
   const dk = dateKey(viewDate);
   const n = REGS.filter(r => r.date === dk).length;
   if(n === 0) { showBanner('Geen registraties op deze dag'); return; }
-  const btn = document.getElementById('delete-day-btn');
-  if(!_deleteDayArmed) {
-    _deleteDayArmed = false; // will be set true after delay
-    btn.textContent = '⚠️ Zeker?';
-    btn.style.background = '#e53935';
-    btn.style.color = '#fff';
-    clearTimeout(_deleteDayTimer);
-    _deleteDayTimer = setTimeout(() => { _deleteDayArmed = true; }, 800);
-    setTimeout(() => {
-      if(!_deleteDayArmed) return;
-      // Auto-reset after 4s if not confirmed
-      setTimeout(() => {
-        _deleteDayArmed = false;
-        btn.textContent = '🗑 Dag';
-        btn.style.background = '';
-        btn.style.color = '#e53935';
-      }, 4000);
-    }, 800);
-    return;
-  }
-  // Second tap - execute
-  _deleteDayArmed = false;
-  clearTimeout(_deleteDayTimer);
-  btn.textContent = '🗑 Dag';
-  btn.style.background = '';
-  btn.style.color = '#e53935';
+  // Gebruik confirm() dialog - werkt altijd op alle apparaten
+  if(!confirm(n + ' registraties van ' + dk + ' verwijderen?')) return;
   try { REGS.filter(r => r.date === dk).forEach(r => deletedIds.add(r.id)); saveDeletedIds(); } catch(e) {}
   REGS = REGS.filter(r => r.date !== dk);
   saveRegs();
   buildRows();
-  showBanner(n + ' registraties van ' + dk + ' verwijderd');
+  showBanner(n + ' registraties verwijderd');
 }
 
 (function(){
