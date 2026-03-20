@@ -1171,11 +1171,10 @@ function handleDrop(pi, mins) {
     targets.forEach(tpi => {
       const p=PEOPLE[tpi];
       // Bepaal modus op basis van dropzone:
-      // Links van achteraf-lijn (of achteraf-modus) = achteraf op getAchterafMins()
-      // Rechts = actueel op nowMins()
-      const achterafX = minToX(getAchterafMins());
-      const dropX = minToX(mins); // waar op tijdlijn losgelaten
-      const isActueel = (achterafMins === null) || (dropX >= achterafX);
+      // Links van achteraf-lijn = achteraf op getAchterafMins()
+      // Rechts van achteraf-lijn (of geen lijn) = actueel op nowMins()
+      // null = actueel-modus; lijn in verleden = links=achteraf, rechts=actueel
+      const isActueel = (achterafMins === null) || (mins > achterafMins);
       const regTime = isActueel ? (function(){
         const t = nowMins();
         const existing = REGS.filter(r=>r.person===PEOPLE[tpi].id&&r.date===dk&&r.time===t+ii);
