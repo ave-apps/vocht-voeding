@@ -1135,7 +1135,9 @@ function renderAllRegBlocks() {
         seenGroups.add(reg.dropGroup);
         const grpRegs = sorted.filter(r=>r.dropGroup===reg.dropGroup)
                               .sort((a,b)=>(Number(a.dropIdx)||0)-(Number(b.dropIdx)||0)||(a.id<b.id?-1:1));
-        units.push({ regs: grpRegs, time: grpRegs[0].time, isGroup: true });
+        // Groep met >1 item = ondeelbaar blok; groep met 1 item = los item (gewone enkelvoudige sleep)
+        const isRealGroup = grpRegs.length > 1;
+        units.push({ regs: grpRegs, time: grpRegs[0].time, isGroup: isRealGroup });
       } else {
         units.push({ regs: [reg], time: reg.time, isGroup: false });
       }
@@ -1150,7 +1152,7 @@ function renderAllRegBlocks() {
       // Zoek geschikt cluster
       let targetCluster = null;
       for(const cl of clusters) {
-        if(unit.time >= cl.startMins && unit.time < cl.startMins + CLUSTER_MINS) {
+        if(unit.time >= cl.startMins - 1 && unit.time < cl.startMins + CLUSTER_MINS) {
           // Past qua tijd — past er ook ruimte voor alle items van deze unit?
           if(cl.itemCount + unit.regs.length <= MAX_COLS * 2) {
             targetCluster = cl;
