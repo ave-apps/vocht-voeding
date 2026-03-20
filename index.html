@@ -1140,9 +1140,10 @@ function renderAllRegBlocks() {
       while(changed) {
         changed = false;
         for(const p of placed) {
-          if(Math.abs(p.x - x) < blockW + blockGap) {
+          if(p.x < x + blockW + blockGap && p.x + blockW + blockGap > x) {
             x = p.x + blockW + blockGap;
             changed = true;
+            break;
           }
         }
       }
