@@ -1101,14 +1101,17 @@ function handleDrop(pi, mins) {
 }
 
 // ══════ RENDER REG BLOCKS ════════════════════════════════════════
-// Layout: 4×2 grid per tijdcluster. Rij 1 = items 1-4 op exacte tijdpositie,
-// rij 2 = items 5-8 met subtiele waaier (+2px per item). Tooltip = werkelijke tijd.
+// Layout: items worden gegroepeerd in tijdvensters van CLUSTER_MINS minuten.
+// Per venster: max 4 items per rij, max 2 rijen (= 8 items).
+// Rij 1 top, rij 2 met subtiele waaier. Tooltip toont werkelijke tijd.
+// DropGroepen worden als één blok behandeld (naast elkaar op rij 1).
 function renderAllRegBlocks() {
   document.querySelectorAll('.reg-block').forEach(b=>b.remove());
   const dk = dateKey(viewDate);
   const blockW = 36, blockGap = 2;
-  const ROW1_TOP = 6, ROW2_TOP = 48; // y binnen de strook
-  const MAX_COLS = 4; // max items per rij naast elkaar
+  const ROW1_TOP = 6, ROW2_TOP = 50;
+  const MAX_COLS = 4;
+  const CLUSTER_MINS = 10; // items binnen 10 min van clusterstart horen samen
 
   PEOPLE.forEach((person, pi) => {
     const area = document.querySelector(`.row-events[data-pi="${pi}"]`);
@@ -1117,84 +1120,93 @@ function renderAllRegBlocks() {
     const dayRegs = REGS.filter(r=>r.date===dk && r.person===person.id);
     if(!dayRegs.length) return;
 
-    // Stap 1: anker per item (groepsitems houden dropIdx-offset)
-    const items = dayRegs.map(reg => {
-      let anchor;
+    // ── Stap 1: maak "units" ──────────────────────────────────────
+    // Een unit is óf een volledige dropGroep (behandeld als blok)
+    // óf een enkel los item. Elke unit heeft een tijdstempel (vroegste time).
+    const seenGroups = new Set();
+    const units = []; // { regs: [...], time: minuut van vroegste item }
+
+    // Sorteer dayRegs op tijd zodat groepen in volgorde komen
+    const sorted = [...dayRegs].sort((a,b)=>a.time-b.time||(a.id<b.id?-1:1));
+
+    sorted.forEach(reg => {
       if(reg.dropGroup) {
-        const grp = dayRegs.filter(r=>r.dropGroup===reg.dropGroup)
-                           .sort((a,b)=>(Number(a.dropIdx)||0)-(Number(b.dropIdx)||0)||(a.id<b.id?-1:1));
-        const idx = grp.findIndex(r=>r.id===reg.id);
-        anchor = minToX(grp[0].time) - LABEL_W + idx * (blockW + blockGap);
+        if(seenGroups.has(reg.dropGroup)) return; // al verwerkt
+        seenGroups.add(reg.dropGroup);
+        const grpRegs = sorted.filter(r=>r.dropGroup===reg.dropGroup)
+                              .sort((a,b)=>(Number(a.dropIdx)||0)-(Number(b.dropIdx)||0)||(a.id<b.id?-1:1));
+        units.push({ regs: grpRegs, time: grpRegs[0].time, isGroup: true });
       } else {
-        anchor = minToX(reg.time) - LABEL_W;
-      }
-      return { reg, anchor };
-    }).sort((a,b) => a.anchor - b.anchor || (a.reg.id < b.reg.id ? -1 : 1));
-
-    // Stap 2: groepeer overlappende items in clusters, ken kolom+rij toe
-    // Een cluster = items waarvan de ankerpositie binnen blockW+blockGap van het clusteranker valt
-    const placed = []; // { x, y, reg }
-    // clusters: Map van clusterAnker -> { col: 0..3, row: 0..1 } teller
-    const clusters = []; // { anchorX, count }
-
-    items.forEach(item => {
-      // Zoek een bestaand cluster waar dit item in past.
-      // Een cluster is "vol" als het 4×2 = 8 items heeft.
-      // Cluster-breedte = MAX_COLS * (blockW+blockGap); item valt erin als
-      // het anker binnen die breedte van het clusteranker ligt.
-      const clusterW = MAX_COLS * (blockW + blockGap);
-      let assigned = false;
-      for(const cl of clusters) {
-        const itemFitsX = item.anchor >= cl.anchorX && item.anchor < cl.anchorX + clusterW;
-        if(itemFitsX && cl.count < MAX_COLS * 2) {
-          const col = cl.count % MAX_COLS;
-          const row = Math.floor(cl.count / MAX_COLS);
-          const x = cl.anchorX + col * (blockW + blockGap);
-          const waaier = row === 1 ? col * 2 : 0; // subtiele waaier op rij 2
-          const y = row === 0 ? ROW1_TOP : ROW2_TOP + waaier;
-          placed.push({ x, y, reg: item.reg });
-          cl.count++;
-          assigned = true;
-          break;
-        }
-      }
-      if(!assigned) {
-        // Nieuw cluster — anker = item.anchor, maar schuif op als er al een cluster
-        // op die positie zit (volgelopen cluster of ander cluster dat overlapt)
-        let anchorX = item.anchor;
-        let tries = 0;
-        while(tries < 50) {
-          const conflict = clusters.find(cl =>
-            anchorX < cl.anchorX + clusterW && anchorX + clusterW > cl.anchorX
-          );
-          if(!conflict) break;
-          anchorX = conflict.anchorX + clusterW;
-          tries++;
-        }
-        clusters.push({ anchorX, count: 1 });
-        placed.push({ x: anchorX, y: ROW1_TOP, reg: item.reg });
+        units.push({ regs: [reg], time: reg.time, isGroup: false });
       }
     });
 
-    // Stap 3: render
-    placed.forEach(({ x, y, reg }) => {
-      const icon = iconFor(reg.iconId);
-      if(!icon) return;
-      const block = document.createElement('div');
-      block.className=`reg-block ${reg.cat==='meal'||reg.cat==='snack'?'snack':reg.cat} ${reg.type}`;
-      block.dataset.regId = reg.id;
-      block.style.left = x + 'px';
-      block.style.top  = y + 'px';
-      block.style.width  = blockW + 'px';
-      block.style.height = '36px';
-      block.title = `${reg.customLabel||icon.label}${reg.amount?' – '+reg.amount+'ml':''}${reg.stuks?' – '+reg.stuks+' st':''} om ${minsToStr(reg.time)}${reg.note?' – '+reg.note:''}`;
-      block.textContent = icon.icon;
-      block.addEventListener('click', e=>{
-        e.stopPropagation();
-        if(bulkMode){ toggleBulkSelect(reg.id); return; }
-        openRegModal(reg.id);
+    // ── Stap 2: cluster units op basis van tijdvenster ────────────
+    // Een cluster heeft een startMinuut; units waarvan time < startMinuut + CLUSTER_MINS
+    // horen erbij. We tellen individuele items (niet units) voor de 4×2 limiet.
+    const clusters = []; // { startMins, slots: [{reg, col, row}], itemCount }
+
+    units.forEach(unit => {
+      // Zoek geschikt cluster
+      let targetCluster = null;
+      for(const cl of clusters) {
+        if(unit.time >= cl.startMins && unit.time < cl.startMins + CLUSTER_MINS) {
+          // Past qua tijd — past er ook ruimte voor alle items van deze unit?
+          if(cl.itemCount + unit.regs.length <= MAX_COLS * 2) {
+            targetCluster = cl;
+            break;
+          }
+        }
+      }
+      if(!targetCluster) {
+        // Nieuw cluster starten op dit tijdstip
+        targetCluster = { startMins: unit.time, slots: [], itemCount: 0 };
+        clusters.push(targetCluster);
+      }
+
+      // Ken slots toe aan items van deze unit
+      unit.regs.forEach((reg, i) => {
+        const slotIdx = targetCluster.itemCount + i;
+        const col = slotIdx % MAX_COLS;
+        const row = Math.floor(slotIdx / MAX_COLS);
+        targetCluster.slots.push({ reg, col, row });
       });
-      area.appendChild(block);
+      targetCluster.itemCount += unit.regs.length;
+    });
+
+    // ── Stap 3: bereken x/y per slot en render ────────────────────
+    // Clusters mogen elkaar niet overlappen; schuif op indien nodig.
+    // clusterX = positie van kolom 0 van dit cluster.
+    let prevClusterEndX = 0;
+    clusters.forEach(cl => {
+      const naturalX = minToX(cl.startMins) - LABEL_W;
+      const clusterX = Math.max(naturalX, prevClusterEndX);
+      const clusterEndX = clusterX + MAX_COLS * (blockW + blockGap);
+      prevClusterEndX = clusterEndX + blockGap;
+
+      cl.slots.forEach(({ reg, col, row }) => {
+        const icon = iconFor(reg.iconId);
+        if(!icon) return;
+        const x = clusterX + col * (blockW + blockGap);
+        const waaier = row === 1 ? col * 2 : 0;
+        const y = row === 0 ? ROW1_TOP : ROW2_TOP + waaier;
+
+        const block = document.createElement('div');
+        block.className = `reg-block ${reg.cat==='meal'||reg.cat==='snack'?'snack':reg.cat} ${reg.type}`;
+        block.dataset.regId = reg.id;
+        block.style.left   = x + 'px';
+        block.style.top    = y + 'px';
+        block.style.width  = blockW + 'px';
+        block.style.height = '36px';
+        block.title = `${reg.customLabel||icon.label}${reg.amount?' – '+reg.amount+'ml':''}${reg.stuks?' – '+reg.stuks+' st':''} om ${minsToStr(reg.time)}${reg.note?' – '+reg.note:''}`;
+        block.textContent = icon.icon;
+        block.addEventListener('click', e=>{
+          e.stopPropagation();
+          if(bulkMode){ toggleBulkSelect(reg.id); return; }
+          openRegModal(reg.id);
+        });
+        area.appendChild(block);
+      });
     });
   }); // einde PEOPLE.forEach
 }
