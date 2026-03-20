@@ -80,6 +80,9 @@ body {
   background: var(--surface2); border-radius: 20px;
   padding: 3px 10px; cursor: pointer; white-space: nowrap;
 }
+.date-pill.today-active {
+  background: var(--accent); color: #fff;
+}
 .view-btns { display: flex; gap: 6px; }
 .view-btn {
   padding: 4px 12px; border-radius: 20px; border: 1.5px solid var(--border);
@@ -1060,7 +1063,11 @@ function handleDrop(pi, mins) {
     targets.forEach(tpi => {
       const p=PEOPLE[tpi];
       REGS.push({ id:uid(), person:p.id, iconId:icon.id, cat:icon.cat,
-        type:icon.type, amount:icon.ml, time:(timeMode==='actueel' ? nowMins() : mins), note:'', date:dk,
+        type:icon.type, amount:icon.ml, time:(timeMode==='actueel' ? (function(){
+          const t = nowMins();
+          const existing = REGS.filter(r=>r.person===PEOPLE[tpi].id&&r.date===dk&&r.time===t);
+          return existing.length ? t + ii : t;
+        })() : mins + ii), note:'', date:dk,
         dropGroup: dropGroupId, dropIdx: ii });
     });
   });
@@ -1411,7 +1418,9 @@ function updateDatePill(){
   else if(diff===1)lbl=`morgen, ${viewDate.getDate()} ${MONTH_SHORT[viewDate.getMonth()]}`;
   else if(diff===-1)lbl=`gisteren, ${viewDate.getDate()} ${MONTH_SHORT[viewDate.getMonth()]}`;
   else lbl=`${DAY_NAMES[viewDate.getDay()]} ${viewDate.getDate()} ${MONTH_SHORT[viewDate.getMonth()]}`;
-  document.getElementById('date-pill').textContent=lbl;
+  const pill = document.getElementById('date-pill');
+  pill.textContent=lbl;
+  pill.classList.toggle('today-active', diff===0);
 }
 
 document.getElementById('prev-day').addEventListener('click',()=>{viewDate.setDate(viewDate.getDate()-1);onDateChange();});
@@ -1425,7 +1434,22 @@ function onDateChange(){
 // Calendar
 const calOverlay=document.getElementById('cal-overlay');
 let calMonth=new Date(viewDate);calMonth.setDate(1);
-document.getElementById('date-pill').addEventListener('click',()=>{calMonth=new Date(viewDate);calMonth.setDate(1);renderCal();calOverlay.style.display='';});
+document.getElementById('date-pill').addEventListener('click',()=>{
+  const today = new Date(); today.setHours(0,0,0,0);
+  const isToday = viewDate.getTime() === today.getTime();
+  if(isToday) {
+    // Op vandaag: eerste klik = waarschuwing, tweede klik = kalender
+    const pill = document.getElementById('date-pill');
+    if(pill.dataset.unlock !== '1') {
+      pill.dataset.unlock = '1';
+      showBanner('Tik nogmaals om datum te wijzigen');
+      setTimeout(() => { pill.dataset.unlock = ''; }, 2000);
+      return;
+    }
+    pill.dataset.unlock = '';
+  }
+  calMonth=new Date(viewDate);calMonth.setDate(1);renderCal();calOverlay.style.display='';
+});
 calOverlay.addEventListener('click',e=>{if(e.target===calOverlay)calOverlay.style.display='none';});
 document.getElementById('cal-prev').addEventListener('click',e=>{e.stopPropagation();calMonth.setMonth(calMonth.getMonth()-1);renderCal();});
 document.getElementById('cal-next').addEventListener('click',e=>{e.stopPropagation();calMonth.setMonth(calMonth.getMonth()+1);renderCal();});
@@ -2001,33 +2025,38 @@ function confirmBulkDelete() {
 }
 
 // Verwijder alle registraties van huidige dag
+let _deleteDayArmed = false;
+let _deleteDayTimer = null;
 function deleteDay() {
   const dk = dateKey(viewDate);
   const n = REGS.filter(r => r.date === dk).length;
   if(n === 0) { showBanner('Geen registraties op deze dag'); return; }
   const btn = document.getElementById('delete-day-btn');
-  const step = btn.dataset.step || '';
-  if(step !== 'ready') {
-    btn.dataset.step = 'waiting';
+  if(!_deleteDayArmed) {
+    _deleteDayArmed = false; // will be set true after delay
     btn.textContent = '⚠️ Zeker?';
     btn.style.background = '#e53935';
     btn.style.color = '#fff';
-    setTimeout(() => { if(btn.dataset.step === 'waiting') btn.dataset.step = 'ready'; }, 700);
+    clearTimeout(_deleteDayTimer);
+    _deleteDayTimer = setTimeout(() => { _deleteDayArmed = true; }, 800);
     setTimeout(() => {
-      if(btn.dataset.step !== 'done') {
-        btn.dataset.step = '';
+      if(!_deleteDayArmed) return;
+      // Auto-reset after 4s if not confirmed
+      setTimeout(() => {
+        _deleteDayArmed = false;
         btn.textContent = '🗑 Dag';
         btn.style.background = '';
         btn.style.color = '#e53935';
-      }
-    }, 4000);
+      }, 4000);
+    }, 800);
     return;
   }
-  btn.dataset.step = 'done';
+  // Second tap - execute
+  _deleteDayArmed = false;
+  clearTimeout(_deleteDayTimer);
   btn.textContent = '🗑 Dag';
   btn.style.background = '';
   btn.style.color = '#e53935';
-  setTimeout(() => { btn.dataset.step = ''; }, 500);
   try { REGS.filter(r => r.date === dk).forEach(r => deletedIds.add(r.id)); saveDeletedIds(); } catch(e) {}
   REGS = REGS.filter(r => r.date !== dk);
   saveRegs();
@@ -2037,14 +2066,12 @@ function deleteDay() {
 
 (function(){
   const btn = document.getElementById('delete-day-btn');
-  btn.addEventListener('click', deleteDay);
-  btn.addEventListener('touchend', function(e){ e.preventDefault(); deleteDay(); });
+  btn.addEventListener('pointerup', function(e){ e.preventDefault(); deleteDay(); });
 })();
 (function(){
   const bcBtn = document.getElementById('bulk-confirm-btn');
   if(bcBtn) {
-    bcBtn.addEventListener('click', function(e){ e.preventDefault(); confirmBulkDelete(); });
-    bcBtn.addEventListener('touchend', function(e){ e.preventDefault(); e.stopPropagation(); confirmBulkDelete(); });
+    bcBtn.addEventListener('pointerup', function(e){ e.preventDefault(); confirmBulkDelete(); });
   }
 })();
 document.getElementById('bulk-select-btn').addEventListener('click', () => {
@@ -2054,7 +2081,12 @@ document.getElementById('bulk-select-btn').addEventListener('click', () => {
 
 // ══════ PINCH ZOOM BLOKKEREN ════════════════
 document.addEventListener('touchmove', function(e) {
-  if(e.touches.length > 1) e.preventDefault();
+  if(e.touches.length > 1) {
+    // Alleen blokkeren buiten knoppen en modals
+    const t = e.target;
+    if(t.closest('button, .modal, .bulk-delete-bar, .modal-overlay')) return;
+    e.preventDefault();
+  }
 }, { passive: false });
 
 // ══════ SLUITEN ══════════════════════════
