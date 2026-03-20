@@ -200,7 +200,7 @@ body {
   color: var(--text-dim); transform: translateX(-50%); white-space: nowrap;
 }
 
-/* Now line */
+/* Now line (rechts = echte nu) */
 .now-line {
   position: absolute; top: 0; bottom: 0; width: 2px;
   background: var(--me); z-index: 28; pointer-events: none;
@@ -209,6 +209,30 @@ body {
   content: 'nu'; position: absolute; top: 0; left: 50%;
   transform: translateX(-50%) translateY(-100%);
   background: var(--me); color: #fff; font-size: 8px; font-weight: 800;
+  padding: 2px 4px; border-radius: 3px; white-space: nowrap;
+  font-family: 'Space Mono', monospace;
+}
+/* Achteraf-lijn (links = sleepbaar anker) */
+.achteraf-line {
+  position: absolute; top: 0; bottom: 0; width: 2px;
+  background: var(--warm); z-index: 27; pointer-events: none;
+  display: none;
+}
+.achteraf-line-handle {
+  position: absolute; top: 0; bottom: 0; width: 16px;
+  left: -7px; z-index: 29; cursor: ew-resize;
+  pointer-events: all;
+}
+.achteraf-line-handle::before {
+  content: ''; position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--warm); border: 2px solid #fff;
+  box-shadow: 0 1px 4px #00000033;
+}
+.achteraf-line::after {
+  content: attr(data-time); position: absolute; top: 0; left: 6px;
+  background: var(--warm); color: #fff; font-size: 8px; font-weight: 800;
   padding: 2px 4px; border-radius: 3px; white-space: nowrap;
   font-family: 'Space Mono', monospace;
 }
@@ -881,6 +905,80 @@ buildTimeHeader();
 const nowLine=document.createElement('div'); nowLine.className='now-line';
 timeline.appendChild(nowLine);
 
+// ── Achteraf-lijn ────────────────────────────────────────────────
+const achterafLine = document.createElement('div');
+achterafLine.className = 'achteraf-line';
+const achterafHandle = document.createElement('div');
+achterafHandle.className = 'achteraf-line-handle';
+achterafLine.appendChild(achterafHandle);
+timeline.appendChild(achterafLine);
+
+let achterafMins = null; // null = samen met nu-lijn
+
+function getAchterafMins() {
+  return achterafMins !== null ? achterafMins : nowMins();
+}
+
+function updateAchterafLine() {
+  const isT = isToday(viewDate);
+  if(!isT || achterafMins === null) {
+    achterafLine.style.display = 'none';
+    return;
+  }
+  achterafLine.style.display = '';
+  achterafLine.style.left = minToX(achterafMins) + 'px';
+  achterafLine.setAttribute('data-time', minsToStr(achterafMins));
+}
+
+// Sleep de achteraf-lijn
+(function(){
+  let dragging = false, startClientX = 0, startMins = 0;
+  const scrollEl = () => document.getElementById('scroll-x');
+
+  achterafHandle.addEventListener('pointerdown', e => {
+    dragging = true;
+    startClientX = e.clientX + scrollEl().scrollLeft;
+    startMins = achterafMins !== null ? achterafMins : nowMins();
+    achterafHandle.setPointerCapture(e.pointerId);
+    e.stopPropagation();
+    e.preventDefault();
+  });
+
+  achterafHandle.addEventListener('pointermove', e => {
+    if(!dragging) return;
+    const currentX = e.clientX + scrollEl().scrollLeft;
+    const dx = currentX - startClientX;
+    const dm = Math.round(dx / PX_PER_MIN);
+    const newMins = Math.max(0, Math.min(nowMins(), startMins + dm));
+    achterafMins = newMins;
+    updateAchterafLine();
+    // Zet ook timeMode op achteraf als lijn versleept wordt
+    if(timeMode !== 'achteraf') setTimeMode('achteraf');
+  });
+
+  achterafHandle.addEventListener('pointerup', () => { dragging = false; });
+})();
+
+function setTimeMode(mode) {
+  timeMode = mode;
+  const btn = document.getElementById('time-mode-btn');
+  if(mode === 'actueel') {
+    achterafMins = null;
+    updateAchterafLine();
+    btn.textContent = '⏱ Actueel';
+    btn.style.background = 'var(--accent)';
+    btn.style.borderColor = 'var(--accent)';
+    btn.style.color = '#fff';
+  } else {
+    if(achterafMins === null) achterafMins = nowMins() - 30; // standaard 30 min terug
+    updateAchterafLine();
+    btn.textContent = '📝 Achteraf';
+    btn.style.background = 'var(--warm)';
+    btn.style.borderColor = 'var(--warm)';
+    btn.style.color = '#fff';
+  }
+}
+
 function updateNowLine(autoScroll) {
   const now=new Date(),nm=now.getHours()*60+now.getMinutes();
   const isT=isToday(viewDate);
@@ -894,6 +992,7 @@ function updateNowLine(autoScroll) {
       scrollEl.scrollLeft = x - LABEL_W - half;
     }
   }
+  updateAchterafLine();
 }
 updateNowLine();
 setInterval(()=>updateNowLine(), 30000);
@@ -1071,13 +1170,20 @@ function handleDrop(pi, mins) {
     // Use a dropGroup id so renderAllRegBlocks can align them visually
     targets.forEach(tpi => {
       const p=PEOPLE[tpi];
+      // Bepaal modus op basis van dropzone:
+      // Links van achteraf-lijn (of achteraf-modus) = achteraf op getAchterafMins()
+      // Rechts = actueel op nowMins()
+      const achterafX = minToX(getAchterafMins());
+      const dropX = minToX(mins); // waar op tijdlijn losgelaten
+      const isActueel = (achterafMins === null) || (dropX >= achterafX);
+      const regTime = isActueel ? (function(){
+        const t = nowMins();
+        const existing = REGS.filter(r=>r.person===PEOPLE[tpi].id&&r.date===dk&&r.time===t+ii);
+        return t + ii + existing.length;
+      })() : getAchterafMins() + ii;
       REGS.push({ id:uid(), person:p.id, iconId:icon.id, cat:icon.cat,
-        type:icon.type, amount:icon.ml, time:(timeMode==='actueel' ? (function(){
-          const t = nowMins();
-          const existing = REGS.filter(r=>r.person===PEOPLE[tpi].id&&r.date===dk&&r.time===t+ii);
-          return t + ii + existing.length;
-        })() : mins + ii), note:'', date:dk,
-        dropGroup: dropGroupId, dropIdx: ii });
+        type:icon.type, amount:icon.ml, time:regTime, note:'', date:dk,
+        dropGroup: dropGroupId, dropIdx: ii, actueel: isActueel });
     });
   });
 
@@ -1143,34 +1249,44 @@ function renderAllRegBlocks() {
       }
     });
 
-    // ── Stap 2: cluster units op basis van tijdvenster ────────────
-    // Een cluster heeft een startMinuut; units waarvan time < startMinuut + CLUSTER_MINS
-    // horen erbij. We tellen individuele items (niet units) voor de 4×2 limiet.
-    const clusters = []; // { startMins, slots: [{reg, col, row}], itemCount }
+    // ── Stap 2: cluster units ────────────────────────────────────
+    // Alleen actueel-drops (timeMode=actueel, opgeslagen als dropGroup.actueel)
+    // worden geclusterd in tijdvensters van CLUSTER_MINS minuten.
+    // Achteraf-drops staan altijd exact op hun droppositie, nooit geclusterd.
+    const clusters = []; // { startMins, slots: [{reg, col, row}], itemCount, actueel }
 
     units.forEach(unit => {
-      // Zoek geschikt cluster
+      // Bepaal of deze unit een actueel-drop is: alle regs hebben timeMode-markering
+      // We detecteren dit via de dropGroup — actueel-drops hebben geen 'achteraf' vlag.
+      // Omdat timeMode niet opgeslagen wordt per reg, gebruiken we een heuristiek:
+      // als alle regs in de unit dezelfde time hebben (of binnen 5 min van nowMins lagen),
+      // beschouwen we het als actueel. Simpelere aanpak: sla actueel op per reg.
+      const isActueel = unit.regs.every(r => r.actueel === true);
+
       let targetCluster = null;
-      for(const cl of clusters) {
-        if(unit.time >= cl.startMins - 1 && unit.time < cl.startMins + CLUSTER_MINS) {
-          // Past qua tijd — past er ook ruimte voor alle items van deze unit?
-          if(cl.itemCount + unit.regs.length <= MAX_COLS * 2) {
-            targetCluster = cl;
-            break;
+
+      if(isActueel) {
+        // Zoek bestaand actueel-cluster binnen tijdvenster
+        for(const cl of clusters) {
+          if(!cl.actueel) continue;
+          if(unit.time >= cl.startMins - 1 && unit.time < cl.startMins + CLUSTER_MINS) {
+            if(cl.itemCount + unit.regs.length <= MAX_COLS * 2) {
+              targetCluster = cl;
+              break;
+            }
           }
         }
       }
+
       if(!targetCluster) {
-        // Nieuw cluster starten op dit tijdstip
-        targetCluster = { startMins: unit.time, slots: [], itemCount: 0 };
+        targetCluster = { startMins: unit.time, slots: [], itemCount: 0, actueel: isActueel };
         clusters.push(targetCluster);
       }
 
-      // Ken slots toe aan items van deze unit
       unit.regs.forEach((reg, i) => {
         const slotIdx = targetCluster.itemCount + i;
-        const col = slotIdx % MAX_COLS;
-        const row = Math.floor(slotIdx / MAX_COLS);
+        const col = isActueel ? slotIdx % MAX_COLS : 0;
+        const row = isActueel ? Math.floor(slotIdx / MAX_COLS) : 0;
         targetCluster.slots.push({ reg, col, row });
       });
       targetCluster.itemCount += unit.regs.length;
@@ -1759,21 +1875,11 @@ document.getElementById('pm-delete').addEventListener('click', () => {
 const addPersonOverlay = document.getElementById('add-person-modal-overlay');
 // Tijd-modus toggle
 document.getElementById('time-mode-btn').addEventListener('click', () => {
-  timeMode = timeMode === 'actueel' ? 'achteraf' : 'actueel';
-  const btn = document.getElementById('time-mode-btn');
-  if(timeMode === 'actueel') {
-    btn.textContent = '⏱ Actueel';
-    btn.style.background = 'var(--accent)';
-    btn.style.borderColor = 'var(--accent)';
-    btn.style.color = '#fff';
-    showBanner('Modus: Actueel — dropt op huidige tijd');
-  } else {
-    btn.textContent = '📝 Achteraf';
-    btn.style.background = 'var(--surface)';
-    btn.style.borderColor = 'var(--text-dim)';
-    btn.style.color = 'var(--text)';
-    showBanner('Modus: Achteraf — dropt op positie tijdlijn');
-  }
+  const newMode = timeMode === 'actueel' ? 'achteraf' : 'actueel';
+  setTimeMode(newMode);
+  showBanner(newMode === 'actueel'
+    ? 'Modus: Actueel — dropt op huidige tijd'
+    : 'Modus: Achteraf — sleep de oranje lijn naar het juiste tijdstip');
 });
 
 document.getElementById('add-person-btn').addEventListener('click', () => {
