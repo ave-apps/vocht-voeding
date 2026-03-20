@@ -661,6 +661,15 @@ body {
 <div id="drag-ghost"></div>
 <div class="banner" id="banner"></div>
 
+<!-- Bulk delete bar -->
+<div class="bulk-delete-bar" id="bulk-delete-bar">
+  <span id="bulk-count-label">0 geselecteerd</span>
+  <div style="display:flex;gap:10px">
+    <button id="bulk-confirm-btn" style="background:#fff;color:#e53935;border:none;border-radius:8px;padding:8px 16px;font-family:Nunito,sans-serif;font-weight:800;cursor:pointer">🗑 Verwijderen</button>
+    <button onclick="exitBulkMode()" style="background:rgba(255,255,255,0.2);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-family:Nunito,sans-serif;font-weight:800;cursor:pointer">Annuleer</button>
+  </div>
+</div>
+
 <script>
 // ══════ ICONS ════════════════════════════════════════════════════
 const ICONS = [
@@ -2099,14 +2108,6 @@ function saveDeletedIds(){
 }
 loadDeletedIds();
 </script>
-<!-- Bulk delete bar -->
-<div class="bulk-delete-bar" id="bulk-delete-bar">
-  <span id="bulk-count-label">0 geselecteerd</span>
-  <div style="display:flex;gap:10px">
-    <button id="bulk-confirm-btn" style="background:#fff;color:#e53935;border:none;border-radius:8px;padding:8px 16px;font-family:Nunito,sans-serif;font-weight:800;cursor:pointer">🗑 Verwijderen</button>
-    <button onclick="exitBulkMode()" style="background:rgba(255,255,255,0.2);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-family:Nunito,sans-serif;font-weight:800;cursor:pointer">Annuleer</button>
-  </div>
-</div>
 
 </body>
 </html>
