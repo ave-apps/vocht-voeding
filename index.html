@@ -1074,8 +1074,8 @@ function handleDrop(pi, mins) {
       REGS.push({ id:uid(), person:p.id, iconId:icon.id, cat:icon.cat,
         type:icon.type, amount:icon.ml, time:(timeMode==='actueel' ? (function(){
           const t = nowMins();
-          const existing = REGS.filter(r=>r.person===PEOPLE[tpi].id&&r.date===dk&&r.time===t);
-          return existing.length ? t + ii : t;
+          const existing = REGS.filter(r=>r.person===PEOPLE[tpi].id&&r.date===dk&&r.time===t+ii);
+          return t + ii + existing.length;
         })() : mins + ii), note:'', date:dk,
         dropGroup: dropGroupId, dropIdx: ii });
     });
@@ -1103,47 +1103,74 @@ function handleDrop(pi, mins) {
 // ══════ RENDER REG BLOCKS ════════════════════════════════════════
 function renderAllRegBlocks() {
   document.querySelectorAll('.reg-block').forEach(b=>b.remove());
-  const dk=dateKey(viewDate);
-  REGS.filter(r=>r.date===dk).forEach(reg=>{
-    const pi=PEOPLE.findIndex(p=>p.id===reg.person);
-    if(pi<0)return;
-    const area=document.querySelector(`.row-events[data-pi="${pi}"]`);
-    if(!area)return;
-    const icon=iconFor(reg.iconId);
-    if(!icon)return;
+  const dk = dateKey(viewDate);
+  const blockW = 36, blockGap = 2, groupTop = 8;
 
-    // Count how many items share the same dropGroup on this person
-    const groupItems = reg.dropGroup
-      ? REGS.filter(r=>r.date===dk&&r.person===reg.person&&r.dropGroup===reg.dropGroup)
-             .sort((a,b)=>{
-               const ai = Number(a.dropIdx)||0, bi = Number(b.dropIdx)||0;
-               if(ai !== bi) return ai - bi;
-               return a.id < b.id ? -1 : 1; // stabiele sortering op id als dropIdx gelijk
-             })
-      : [reg];
-    const groupIdx = reg.dropGroup ? groupItems.findIndex(r=>r.id===reg.id) : 0;
-    const blockW = 36;
-    const blockGap = 2;
-    const baseX = minToX(reg.time) - LABEL_W;
-    const x = baseX + groupIdx * (blockW + blockGap);
-    const groupTop = 8; // altijd zelfde hoogte binnen rij
+  // Verwerk per persoon alle items van vandaag in één layout-pass
+  PEOPLE.forEach((person, pi) => {
+    const area = document.querySelector(`.row-events[data-pi="${pi}"]`);
+    if(!area) return;
 
-    const block=document.createElement('div');
-    block.className=`reg-block ${reg.cat==='meal'||reg.cat==='snack'?'snack':reg.cat} ${reg.type}`;
-    block.dataset.regId = reg.id;
-    block.style.left=x+'px';
-    block.style.width=blockW+'px';
-    if(reg.dropGroup) { block.style.top = groupTop+'px'; block.style.height = '36px'; }
-    block.title=`${reg.customLabel||icon.label}${reg.amount?' - '+reg.amount+'ml':''}${reg.stuks?' - '+reg.stuks+' st':''} om ${minsToStr(reg.time)}${reg.note?' - '+reg.note:''}`;
-    block.textContent=icon.icon;
-    block.dataset.regId=reg.id;
-    block.addEventListener('click', e=>{
-    e.stopPropagation();
-    if(bulkMode){ toggleBulkSelect(reg.id); return; }
-    openRegModal(reg.id);
-  });
-    area.appendChild(block);
-  });
+    const dayRegs = REGS.filter(r=>r.date===dk && r.person===person.id);
+    if(!dayRegs.length) return;
+
+    // Stap 1: bepaal "ankerpositie" per item
+    // Groepsitems: anker = time van eerste item in de groep + dropIdx offset
+    // Losse items:  anker = time
+    // Sorteer op anker zodat we van links naar rechts werken
+    const items = dayRegs.map(reg => {
+      let anchor;
+      if(reg.dropGroup) {
+        const grp = dayRegs.filter(r=>r.dropGroup===reg.dropGroup)
+                           .sort((a,b)=>(Number(a.dropIdx)||0)-(Number(b.dropIdx)||0)||(a.id<b.id?-1:1));
+        const idx = grp.findIndex(r=>r.id===reg.id);
+        anchor = minToX(grp[0].time) - LABEL_W + idx * (blockW + blockGap);
+      } else {
+        anchor = minToX(reg.time) - LABEL_W;
+      }
+      return { reg, anchor };
+    }).sort((a,b) => a.anchor - b.anchor || (a.reg.id < b.reg.id ? -1 : 1));
+
+    // Stap 2: ken elke item een x toe; schuif op als het overlapt met al geplaatste items
+    const placed = []; // { x, reg }
+    items.forEach(item => {
+      let x = item.anchor;
+      // Schuif naar rechts zolang er overlap is met een al geplaatst blok
+      let changed = true;
+      while(changed) {
+        changed = false;
+        for(const p of placed) {
+          if(Math.abs(p.x - x) < blockW + blockGap) {
+            x = p.x + blockW + blockGap;
+            changed = true;
+          }
+        }
+      }
+      placed.push({ x, reg: item.reg });
+    });
+
+    // Stap 3: render
+    placed.forEach(({ x, reg }) => {
+      const icon = iconFor(reg.iconId);
+      if(!icon) return;
+      const block=document.createElement('div');
+      block.className=`reg-block ${reg.cat==='meal'||reg.cat==='snack'?'snack':reg.cat} ${reg.type}`;
+      block.dataset.regId = reg.id;
+      block.style.left=x+'px';
+      block.style.width=blockW+'px';
+      block.style.top = groupTop+'px';
+      block.style.height = '36px';
+      block.title=`${reg.customLabel||icon.label}${reg.amount?' - '+reg.amount+'ml':''}${reg.stuks?' - '+reg.stuks+' st':''} om ${minsToStr(reg.time)}${reg.note?' - '+reg.note:''}`;
+      block.textContent=icon.icon;
+      block.dataset.regId=reg.id;
+      block.addEventListener('click', e=>{
+        e.stopPropagation();
+        if(bulkMode){ toggleBulkSelect(reg.id); return; }
+        openRegModal(reg.id);
+      });
+      area.appendChild(block);
+    }); // einde placed.forEach
+  }); // einde PEOPLE.forEach
 }
 
 // ══════ REG MODAL ════════════════════════════════════════════════
