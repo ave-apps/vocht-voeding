@@ -216,25 +216,39 @@ body {
 .achteraf-line {
   position: absolute; top: 0; bottom: 0; width: 2px;
   background: var(--warm); z-index: 27; pointer-events: none;
-  display: none;
+  opacity: 0.35;
+  transition: opacity .2s;
+  overflow: visible;
 }
+.achteraf-line.active {
+  opacity: 1;
+}
+/* Handle: breed klikgebied rondom de lijn */
 .achteraf-line-handle {
-  position: absolute; top: 0; bottom: 0; width: 16px;
-  left: -7px; z-index: 29; cursor: ew-resize;
+  position: absolute;
+  top: 50%;
+  left: -14px;          /* steekt 14px links uit */
+  width: 30px;          /* totaal 30px breed klikgebied */
+  height: 30px;
+  transform: translateY(-50%);
+  cursor: ew-resize;
   pointer-events: all;
+  z-index: 30;
+  display: flex; align-items: center; justify-content: center;
 }
-.achteraf-line-handle::before {
-  content: ''; position: absolute; top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  width: 10px; height: 10px; border-radius: 50%;
-  background: var(--warm); border: 2px solid #fff;
-  box-shadow: 0 1px 4px #00000033;
+/* Bolletje als visuele greep */
+.achteraf-line-handle::after {
+  content: '';
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--warm); border: 2.5px solid #fff;
+  box-shadow: 0 1px 6px #00000055;
+  display: block;
 }
-.achteraf-line::after {
-  content: attr(data-time); position: absolute; top: 0; left: 6px;
+.achteraf-line.active::before {
+  content: attr(data-time); position: absolute; top: 2px; left: 6px;
   background: var(--warm); color: #fff; font-size: 8px; font-weight: 800;
   padding: 2px 4px; border-radius: 3px; white-space: nowrap;
-  font-family: 'Space Mono', monospace;
+  font-family: 'Space Mono', monospace; pointer-events: none;
 }
 
 /* ── Person rows ── */
@@ -910,8 +924,9 @@ const achterafLine = document.createElement('div');
 achterafLine.className = 'achteraf-line';
 const achterafHandle = document.createElement('div');
 achterafHandle.className = 'achteraf-line-handle';
+achterafHandle.title = 'Sleep naar verleden voor achteraf registreren';
 achterafLine.appendChild(achterafHandle);
-timeline.appendChild(achterafLine);
+timeline.insertBefore(achterafLine, nowLine); // achter nowLine zodat nowLine bovenop zit
 
 let achterafMins = null; // null = samen met nu-lijn
 
@@ -921,13 +936,18 @@ function getAchterafMins() {
 
 function updateAchterafLine() {
   const isT = isToday(viewDate);
-  if(!isT || achterafMins === null) {
-    achterafLine.style.display = 'none';
-    return;
-  }
+  if(!isT) { achterafLine.style.display = 'none'; return; }
+  // Altijd tonen op vandaag: op nowMins() als null, anders op achterafMins
+  const displayMins = achterafMins !== null ? achterafMins : nowMins();
   achterafLine.style.display = '';
-  achterafLine.style.left = minToX(achterafMins) + 'px';
-  achterafLine.setAttribute('data-time', minsToStr(achterafMins));
+  achterafLine.style.left = minToX(displayMins) + 'px';
+  achterafLine.setAttribute('data-time', minsToStr(displayMins));
+  // active = in achteraf-modus (lijn staat in verleden)
+  if(achterafMins !== null) {
+    achterafLine.classList.add('active');
+  } else {
+    achterafLine.classList.remove('active');
+  }
 }
 
 // Sleep de achteraf-lijn
@@ -1132,7 +1152,8 @@ document.addEventListener('touchend', e=>{
   if(area){
     const pi=parseInt(area.dataset.pi);
     const rect=area.getBoundingClientRect();
-    const relX=t.clientX-rect.left;
+    const scrollEl=document.getElementById('scroll-x');
+    const relX=t.clientX-rect.left+scrollEl.scrollLeft;
     const mins=Math.round((START_MINS+relX/PX_PER_MIN)/5)*5;
     handleDrop(pi, mins);
   }
@@ -1145,7 +1166,8 @@ function setupDropZone(area, pi) {
   area.addEventListener('drop', e=>{
     e.preventDefault(); area.classList.remove('drag-over');
     const rect=area.getBoundingClientRect();
-    const relX=e.clientX-rect.left;
+    const scrollEl=document.getElementById('scroll-x');
+    const relX=e.clientX-rect.left+scrollEl.scrollLeft;
     const mins=Math.round((START_MINS+relX/PX_PER_MIN)/5)*5;
     handleDrop(pi, mins);
     dragIconId=null;
@@ -2134,7 +2156,7 @@ document.querySelector('.header-top h1').addEventListener('click',()=>{
 
   el.addEventListener('mousedown', e => {
     // Niet starten als er op een knop/icoon geklikt wordt
-    if(e.target.closest('.icon-chip,.reg-block,.person-label,.btn,.date-arrow,.view-btn,.modal-overlay')) return;
+    if(e.target.closest('.icon-chip,.reg-block,.person-label,.btn,.date-arrow,.view-btn,.modal-overlay,.achteraf-line-handle')) return;
     isDown = true;
     startX = e.pageX;
     scrollStart = el.scrollLeft;
