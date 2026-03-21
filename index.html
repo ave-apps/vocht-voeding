@@ -137,7 +137,7 @@ body {
     overflow-x: hidden; /* geen scroll, Next-knop navigeert */
     flex-wrap: nowrap;
   }
-  .tray-cat-label { min-width: 36px; font-size: 8px; }
+  .tray-cat-label { min-width: 36px; font-size: 8px; order: -1; }
   .icon-chip { min-width: 46px; padding: 4px 5px; }
   .icon-chip .chip-icon { font-size: 18px; }
   .icon-chip .chip-label { font-size: 7px; }
@@ -152,7 +152,8 @@ body {
     border-radius: 12px; border: 2px solid var(--accent);
     background: var(--surface); color: var(--accent);
     font-size: 18px; font-weight: 900; cursor: pointer;
-    flex-shrink: 0;
+    order: 999; /* altijd als laatste */
+    margin-left: auto;
   }
 }
 @media (min-width: 601px) {
