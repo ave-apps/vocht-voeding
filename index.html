@@ -1298,6 +1298,15 @@ function renderAllRegBlocks() {
             }
           }
         }
+      } else {
+        // Achteraf: zoek bestaand achteraf-cluster op exact dezelfde lijnpositie
+        for(const cl of clusters) {
+          if(cl.actueel) continue;
+          if(cl.startMins === unit.time && cl.itemCount < 2) {
+            targetCluster = cl;
+            break;
+          }
+        }
       }
 
       if(!targetCluster) {
@@ -1308,7 +1317,7 @@ function renderAllRegBlocks() {
       unit.regs.forEach((reg, i) => {
         const slotIdx = targetCluster.itemCount + i;
         const col = isActueel ? slotIdx % MAX_COLS : 0;
-        const row = isActueel ? Math.floor(slotIdx / MAX_COLS) : 0;
+        const row = isActueel ? Math.floor(slotIdx / MAX_COLS) : slotIdx; // achteraf: 0=boven, 1=onder
         targetCluster.slots.push({ reg, col, row });
       });
       targetCluster.itemCount += unit.regs.length;
@@ -1330,21 +1339,18 @@ function renderAllRegBlocks() {
         const usedCols = Math.min(cl.itemCount, MAX_COLS);
         prevActueelEndX = clusterX + usedCols * (blockW + blockGap) + blockGap;
       } else {
-        // Achteraf: groeit naar links vanuit ankerpunt
-        // col 0 = meest rechts (dichtst bij lijn), col 3 = meest links
-        // clusterX = ankerpunt minus breedte van alle items
-        const usedCols = Math.min(cl.itemCount, MAX_COLS);
-        clusterX = anchorX - usedCols * (blockW + blockGap);
+        // Achteraf: altijd één kolom links van ankerpunt
+        clusterX = anchorX - (blockW + blockGap);
       }
 
       cl.slots.forEach(({ reg, col, row }) => {
         const icon = iconFor(reg.iconId);
         if(!icon) return;
-        // Achteraf: col 0 is rechtsboven (dichts bij lijn), opvullen naar links
-        const effectiveCol = cl.actueel ? col : (Math.min(cl.itemCount, MAX_COLS) - 1 - col);
+        // Achteraf: altijd col 0, stapelt alleen verticaal (rij 0 = eerste, rij 1 = tweede)
+        const effectiveCol = cl.actueel ? col : 0;
         const x = clusterX + effectiveCol * (blockW + blockGap);
-        const waaier = row === 1 ? col * 2 : 0;
-        const y = row === 0 ? ROW1_TOP : ROW2_TOP + waaier;
+        const waaier = 0;
+        const y = row === 0 ? ROW1_TOP : ROW2_TOP;
 
         const block = document.createElement('div');
         block.className = `reg-block ${reg.cat==='meal'||reg.cat==='snack'?'snack':reg.cat} ${reg.type}`;
