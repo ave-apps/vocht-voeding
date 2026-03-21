@@ -126,6 +126,38 @@ body {
   scrollbar-width: none;
 }
 .tray-row::-webkit-scrollbar { display: none; }
+
+/* Mobiele tray: blokken met Next-knop */
+@media (max-width: 600px) {
+  .icon-tray {
+    padding: 6px 8px;
+    position: relative;
+  }
+  .tray-row {
+    overflow-x: hidden; /* geen scroll, Next-knop navigeert */
+    flex-wrap: nowrap;
+  }
+  .tray-cat-label { min-width: 36px; font-size: 8px; }
+  .icon-chip { min-width: 46px; padding: 4px 5px; }
+  .icon-chip .chip-icon { font-size: 18px; }
+  .icon-chip .chip-label { font-size: 7px; }
+  /* Iconen die niet in huidig blok zitten: verbergen */
+  .icon-chip.tray-hidden { display: none !important; }
+  /* Next knop */
+  .tray-next-btn {
+    display: flex !important;
+    flex-shrink: 0;
+    align-items: center; justify-content: center;
+    width: 36px; height: 52px;
+    border-radius: 12px; border: 2px solid var(--accent);
+    background: var(--surface); color: var(--accent);
+    font-size: 18px; font-weight: 900; cursor: pointer;
+    flex-shrink: 0;
+  }
+}
+@media (min-width: 601px) {
+  .tray-next-btn { display: none !important; }
+}
 .tray-cat-label {
   font-size: 9px; font-weight: 800; text-transform: uppercase;
   letter-spacing: .8px; min-width: 44px; color: var(--text-dim);
@@ -562,9 +594,9 @@ body {
 
 <!-- Icon tray -->
 <div class="icon-tray" id="icon-tray">
-  <div class="tray-row" id="tray-warm"></div>
-  <div class="tray-row" id="tray-cold"></div>
-  <div class="tray-row" id="tray-food"></div>
+  <div class="tray-row" id="tray-warm"><button class="tray-next-btn" data-tray="warm">›</button></div>
+  <div class="tray-row" id="tray-cold"><button class="tray-next-btn" data-tray="cold">›</button></div>
+  <div class="tray-row" id="tray-food"><button class="tray-next-btn" data-tray="food">›</button></div>
 </div>
 
 <!-- Select bar -->
@@ -2210,6 +2242,61 @@ document.getElementById('undo-btn-header').addEventListener('click', () => {
   }
   document.getElementById('prev-day').addEventListener('click', e => confirmDayNav(e, -1), true);
   document.getElementById('next-day').addEventListener('click', e => confirmDayNav(e, 1), true);
+})();
+
+// ── Mobiele tray-blok navigatie ──────────────────────────────────
+(function(){
+  const BLOCK_SIZE = 5; // iconen per blok op mobiel
+  const trayState = { warm: 0, cold: 0, food: 0 }; // huidig blok per rij
+
+  function isMobile() { return window.innerWidth <= 600; }
+
+  function updateTrayBlocks() {
+    if(!isMobile()) {
+      // Desktop: alles zichtbaar
+      document.querySelectorAll('.icon-chip').forEach(c => c.classList.remove('tray-hidden'));
+      return;
+    }
+    ['warm','cold','food'].forEach(cat => {
+      const row = document.getElementById('tray-' + cat);
+      const chips = [...row.querySelectorAll('.icon-chip')];
+      const page = trayState[cat];
+      const start = page * BLOCK_SIZE;
+      const end = start + BLOCK_SIZE;
+      chips.forEach((chip, i) => {
+        chip.classList.toggle('tray-hidden', i < start || i >= end);
+      });
+      // Next-knop: verberg als geen volgende blok
+      const btn = row.querySelector('.tray-next-btn');
+      if(btn) btn.style.opacity = end >= chips.length ? '0.2' : '1';
+    });
+  }
+
+  // Next-knop klik: volgende blok, wrap around
+  document.querySelectorAll('.tray-next-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const cat = btn.dataset.tray;
+      const row = document.getElementById('tray-' + cat);
+      const chips = [...row.querySelectorAll('.icon-chip')];
+      const maxPage = Math.ceil(chips.length / BLOCK_SIZE) - 1;
+      trayState[cat] = trayState[cat] >= maxPage ? 0 : trayState[cat] + 1;
+      updateTrayBlocks();
+    });
+  });
+
+  // Na buildTray aanroepen, en bij resize
+  const origBuildTray = buildTray;
+  window.addEventListener('resize', updateTrayBlocks);
+
+  // Hook in na buildTray — wacht kort tot DOM gevuld is
+  const observer = new MutationObserver(() => { updateTrayBlocks(); });
+  ['tray-warm','tray-cold','tray-food'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) observer.observe(el, { childList: true });
+  });
+  // Ook direct aanroepen
+  setTimeout(updateTrayBlocks, 100);
 })();
 
 loadSyncConfig();
