@@ -1314,14 +1314,23 @@ function renderAllRegBlocks() {
     });
 
     // ── Stap 3: bereken x/y per slot en render ────────────────────
-    // Clusters mogen elkaar niet overlappen; schuif op indien nodig.
-    // clusterX = positie van kolom 0 van dit cluster.
-    let prevClusterEndX = 0;
+    // Actuele clusters: mogen niet overlappen, schuiven op indien nodig.
+    // Achteraf-items: altijd op exacte tijdpositie, nooit opschuiven.
+    // prevClusterEndX bijhouden PER TYPE zodat achteraf-items actuelen niet opschuiven.
+    let prevActueelEndX = 0;
+
     clusters.forEach(cl => {
       const naturalX = minToX(cl.startMins) - LABEL_W;
-      const clusterX = Math.max(naturalX, prevClusterEndX);
-      const clusterEndX = clusterX + MAX_COLS * (blockW + blockGap);
-      prevClusterEndX = clusterEndX + blockGap;
+      let clusterX;
+      if(cl.actueel) {
+        // Actueel: schuif op als vorig actueel-cluster overlapt
+        clusterX = Math.max(naturalX, prevActueelEndX);
+        const usedCols = Math.min(cl.itemCount, MAX_COLS);
+        prevActueelEndX = clusterX + usedCols * (blockW + blockGap) + blockGap;
+      } else {
+        // Achteraf: altijd exact op tijdpositie
+        clusterX = naturalX;
+      }
 
       cl.slots.forEach(({ reg, col, row }) => {
         const icon = iconFor(reg.iconId);
