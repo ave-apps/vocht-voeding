@@ -1757,10 +1757,11 @@ function onDateChange(){
 const calOverlay=document.getElementById('cal-overlay');
 let calMonth=new Date(viewDate);calMonth.setDate(1);
 document.getElementById('date-pill').addEventListener('click',()=>{
+  // Op mobiel: geen kalender (pijltjes verborgen, altijd vandaag)
+  if(window.innerWidth <= 600) return;
   const today = new Date(); today.setHours(0,0,0,0);
   const isToday = viewDate.getTime() === today.getTime();
   if(isToday) {
-    // Op vandaag: eerste klik = waarschuwing, tweede klik = kalender
     const pill = document.getElementById('date-pill');
     if(pill.dataset.unlock !== '1') {
       pill.dataset.unlock = '1';
