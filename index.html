@@ -203,6 +203,12 @@ body {
     pointer-events: none; flex-shrink: 0;
   }
   .icon-chip.chip-sticky { outline-width: 3px !important; }
+
+/* Registratie voorbij nu-lijn */
+.reg-block.future {
+  opacity: 0.55;
+  border-style: dashed !important;
+}
   .icon-chip.chip-selected .chip-cb {
     background: var(--accent); border-color: var(--accent); color: #fff;
   }
@@ -1443,7 +1449,9 @@ function renderAllRegBlocks() {
         block.style.top    = y + 'px';
         block.style.width  = blockW + 'px';
         block.style.height = '36px';
-        block.title = `${reg.customLabel||icon.label}${reg.amount?' – '+reg.amount+'ml':''}${reg.stuks?' – '+reg.stuks+' st':''} om ${minsToStr(reg.time)}${reg.note?' – '+reg.note:''}`;
+        const isFuture = isToday(viewDate) && reg.time > nowMins();
+        if(isFuture) block.classList.add('future');
+        block.title = `${reg.customLabel||icon.label}${reg.amount?' – '+reg.amount+'ml':''}${reg.stuks?' – '+reg.stuks+' st':''} om ${minsToStr(reg.time)}${isFuture?' (voorbij nu)':''}${reg.note?' – '+reg.note:''}`;
         block.textContent = icon.icon;
         block.addEventListener('click', e=>{
           e.stopPropagation();
