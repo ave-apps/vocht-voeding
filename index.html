@@ -44,6 +44,22 @@ body {
   flex-direction: column;
 }
 
+/* ── Hamburger responsive ── */
+@media (max-width: 600px) {
+  #desktop-btns { display: none !important; }
+  #hamburger-btn { display: block !important; }
+  #view-btns-bar { display: none !important; }
+}
+@media (min-width: 601px) {
+  #hamburger-btn { display: none !important; }
+  #hamburger-menu { display: none !important; }
+  #undo-btn-header { display: none !important; }
+}
+.hm-item {
+  width: 100%; text-align: left; padding: 10px 14px;
+  font-size: 13px; border-radius: 12px;
+}
+
 /* ── Header ── */
 .header {
   background: var(--surface);
@@ -233,6 +249,7 @@ body {
   transform: translateY(-50%);
   cursor: ew-resize;
   pointer-events: all;
+  touch-action: none;   /* voorkomt scroll-interferentie op mobiel */
   z-index: 30;
   display: flex; align-items: center; justify-content: center;
 }
@@ -510,18 +527,36 @@ body {
       <button class="date-arrow" id="next-day">&#8250;</button>
     </div>
   </div>
-  <div style="display:flex;gap:6px;align-items:center">
-    <div class="view-btns">
+  <div style="display:flex;gap:6px;align-items:center;flex-wrap:nowrap;overflow:hidden">
+    <div class="view-btns" id="view-btns-bar">
       <button class="view-btn active" data-view="timeline">Tijdlijn</button>
       <button class="view-btn" data-view="overview">Overzicht</button>
       <button class="view-btn" data-view="periode">Periode</button>
     </div>
-    <button id="time-mode-btn" style="margin-left:auto;padding:6px 14px;border-radius:20px;border:2px solid var(--accent);background:var(--accent);color:#fff;font-family:Nunito,sans-serif;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap" title="Schakel tussen actueel en achteraf invoeren">⏱ Actueel</button>
+    <button id="time-mode-btn" style="padding:6px 14px;border-radius:20px;border:2px solid var(--accent);background:var(--accent);color:#fff;font-family:Nunito,sans-serif;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;flex-shrink:0" title="Schakel tussen actueel en achteraf invoeren">⏱ Actueel</button>
+    <button class="view-btn" id="bulk-select-btn" style="flex-shrink:0" title="Selecteer registraties om te verwijderen">☑ Selecteer</button>
+    <button class="view-btn" id="undo-btn-header" style="flex-shrink:0;display:none;color:#c45a2a" title="Maak laatste registratie ongedaan">↩</button>
+    <!-- Hamburger knop: alleen zichtbaar op mobiel -->
+    <button id="hamburger-btn" style="flex-shrink:0;display:none;padding:6px 10px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);font-size:16px;cursor:pointer;line-height:1" title="Menu">☰</button>
+    <!-- Desktop knoppen: verborgen op mobiel -->
+    <div id="desktop-btns" style="display:flex;gap:6px;align-items:center;flex-shrink:0">
       <button class="view-btn" id="add-person-btn">➕ Strook</button>
-    <button class="view-btn" id="goals-btn">&#9881; Doelen</button>
-      <button class="view-btn" id="close-btn" title="App afsluiten" style="color:#e53935">&#x2715; Sluiten</button>
+      <button class="view-btn" id="goals-btn">&#9881; Doelen</button>
       <button class="view-btn" id="delete-day-btn" style="color:#e53935" title="Verwijder alle registraties van deze dag">🗑 Dag</button>
-      <button class="view-btn" id="bulk-select-btn" title="Selecteer registraties om te verwijderen">☑ Selecteer</button>
+      <button class="view-btn" id="close-btn" title="App afsluiten" style="color:#e53935">&#x2715; Sluiten</button>
+    </div>
+  </div>
+  <!-- Hamburger dropdown menu -->
+  <div id="hamburger-menu" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:200">
+    <div id="hamburger-backdrop" style="position:absolute;inset:0;background:#00000033"></div>
+    <div style="position:absolute;top:0;right:0;bottom:0;width:220px;background:var(--surface);box-shadow:-4px 0 20px #00000022;display:flex;flex-direction:column;padding:20px 16px;gap:12px">
+      <div style="font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--text-dim);margin-bottom:4px">MENU</div>
+      <button class="view-btn hm-item" id="hm-strook">➕ Strook toevoegen</button>
+      <button class="view-btn hm-item" id="hm-doelen">⚙ Doelen</button>
+      <button class="view-btn hm-item" id="hm-dag" style="color:#e53935">🗑 Dag verwijderen</button>
+      <div style="flex:1"></div>
+      <button class="view-btn hm-item" id="hm-sluiten" style="color:#e53935;border-color:#e5393533">✕ Sluiten</button>
+    </div>
   </div>
 </div>
 
@@ -950,33 +985,49 @@ function updateAchterafLine() {
   }
 }
 
-// Sleep de achteraf-lijn
+// Sleep de achteraf-lijn (pointer + touch events voor mobiel)
 (function(){
   let dragging = false, startClientX = 0, startMins = 0;
   const scrollEl = () => document.getElementById('scroll-x');
 
-  achterafHandle.addEventListener('pointerdown', e => {
+  function startDrag(clientX) {
     dragging = true;
-    startClientX = e.clientX + scrollEl().scrollLeft;
+    startClientX = clientX + scrollEl().scrollLeft;
     startMins = achterafMins !== null ? achterafMins : nowMins();
-    achterafHandle.setPointerCapture(e.pointerId);
-    e.stopPropagation();
-    e.preventDefault();
-  });
+  }
 
-  achterafHandle.addEventListener('pointermove', e => {
+  function moveDrag(clientX) {
     if(!dragging) return;
-    const currentX = e.clientX + scrollEl().scrollLeft;
+    const currentX = clientX + scrollEl().scrollLeft;
     const dx = currentX - startClientX;
     const dm = Math.round(dx / PX_PER_MIN);
     const newMins = Math.max(0, Math.min(nowMins(), startMins + dm));
     achterafMins = newMins;
     updateAchterafLine();
-    // Zet ook timeMode op achteraf als lijn versleept wordt
     if(timeMode !== 'achteraf') setTimeMode('achteraf');
-  });
+  }
 
-  achterafHandle.addEventListener('pointerup', () => { dragging = false; });
+  function endDrag() { dragging = false; }
+
+  // Pointer events (PC)
+  achterafHandle.addEventListener('pointerdown', e => {
+    startDrag(e.clientX);
+    achterafHandle.setPointerCapture(e.pointerId);
+    e.stopPropagation(); e.preventDefault();
+  });
+  achterafHandle.addEventListener('pointermove', e => { moveDrag(e.clientX); });
+  achterafHandle.addEventListener('pointerup', endDrag);
+
+  // Touch events (mobiel — expliciete fallback)
+  achterafHandle.addEventListener('touchstart', e => {
+    startDrag(e.touches[0].clientX);
+    e.stopPropagation(); e.preventDefault();
+  }, { passive: false });
+  achterafHandle.addEventListener('touchmove', e => {
+    moveDrag(e.touches[0].clientX);
+    e.stopPropagation(); e.preventDefault();
+  }, { passive: false });
+  achterafHandle.addEventListener('touchend', endDrag);
 })();
 
 function setTimeMode(mode) {
@@ -2121,6 +2172,45 @@ document.getElementById('sm-disconnect').addEventListener('click', () => {
   showBanner('Sync ontkoppeld');
   closeSyncModal();
 });
+
+// ── Hamburger menu ───────────────────────────────────────────────
+(function(){
+  const btn = document.getElementById('hamburger-btn');
+  const menu = document.getElementById('hamburger-menu');
+  const backdrop = document.getElementById('hamburger-backdrop');
+  function open() { menu.style.display = ''; }
+  function close() { menu.style.display = 'none'; }
+  btn.addEventListener('click', open);
+  backdrop.addEventListener('click', close);
+  // Menu-items delegeren naar bestaande knoppen
+  document.getElementById('hm-strook').addEventListener('click', () => { close(); document.getElementById('add-person-btn').click(); });
+  document.getElementById('hm-doelen').addEventListener('click', () => { close(); document.getElementById('goals-btn').click(); });
+  document.getElementById('hm-dag').addEventListener('click', () => { close(); document.getElementById('delete-day-btn').click(); });
+  document.getElementById('hm-sluiten').addEventListener('click', () => { close(); document.getElementById('close-btn').click(); });
+})();
+
+// ── Undo knop in header (mobiel) ─────────────────────────────────
+document.getElementById('undo-btn-header').addEventListener('click', () => {
+  document.getElementById('undo-btn') && document.getElementById('undo-btn').click();
+});
+
+// ── Dagwissel bevestiging ────────────────────────────────────────
+(function(){
+  function confirmDayNav(e, direction) {
+    // Alleen bevestiging op mobiel (smal scherm)
+    if(window.innerWidth > 600) return; // desktop: gewone listener doet het werk
+    e.stopPropagation(); e.preventDefault();
+    const target = new Date(viewDate);
+    target.setDate(target.getDate() + direction);
+    const label = target.toLocaleDateString('nl-NL', { weekday:'short', day:'numeric', month:'short' });
+    if(confirm('Naar ' + label + ' gaan?')) {
+      viewDate = target;
+      onDateChange();
+    }
+  }
+  document.getElementById('prev-day').addEventListener('click', e => confirmDayNav(e, -1), true);
+  document.getElementById('next-day').addEventListener('click', e => confirmDayNav(e, 1), true);
+})();
 
 loadSyncConfig();
 if(syncEnabled) { updateSyncIndicator('ok'); setTimeout(syncPull, 1500); }
