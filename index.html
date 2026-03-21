@@ -1196,12 +1196,13 @@ function handleDrop(pi, mins) {
       // Links van achteraf-lijn = achteraf op getAchterafMins()
       // Rechts van achteraf-lijn (of geen lijn) = actueel op nowMins()
       // null = actueel-modus; lijn in verleden = links=achteraf, rechts=actueel
-      const isActueel = (achterafMins === null) || (mins > achterafMins);
+      // Altijd achteraf als lijn in verleden staat, ongeacht waar je loslaat
+      const isActueel = (achterafMins === null);
       const regTime = isActueel ? (function(){
         const t = nowMins();
         const existing = REGS.filter(r=>r.person===PEOPLE[tpi].id&&r.date===dk&&r.time===t+ii);
         return t + ii + existing.length;
-      })() : getAchterafMins() + ii;
+      })() : getAchterafMins() - ii; // groeit naar verleden: ii=0 op lijn, ii=1 één minuut eerder
       REGS.push({ id:uid(), person:p.id, iconId:icon.id, cat:icon.cat,
         type:icon.type, amount:icon.ml, time:regTime, note:'', date:dk,
         dropGroup: dropGroupId, dropIdx: ii, actueel: isActueel });
@@ -1320,22 +1321,28 @@ function renderAllRegBlocks() {
     let prevActueelEndX = 0;
 
     clusters.forEach(cl => {
-      const naturalX = minToX(cl.startMins) - LABEL_W;
+      const anchorX = minToX(cl.startMins) - LABEL_W; // exacte tijdpositie van ankerpunt
       let clusterX;
+
       if(cl.actueel) {
-        // Actueel: schuif op als vorig actueel-cluster overlapt
-        clusterX = Math.max(naturalX, prevActueelEndX);
+        // Actueel: groeit naar rechts, schuif op als vorig actueel-cluster overlapt
+        clusterX = Math.max(anchorX, prevActueelEndX);
         const usedCols = Math.min(cl.itemCount, MAX_COLS);
         prevActueelEndX = clusterX + usedCols * (blockW + blockGap) + blockGap;
       } else {
-        // Achteraf: altijd exact op tijdpositie
-        clusterX = naturalX;
+        // Achteraf: groeit naar links vanuit ankerpunt
+        // col 0 = meest rechts (dichtst bij lijn), col 3 = meest links
+        // clusterX = ankerpunt minus breedte van alle items
+        const usedCols = Math.min(cl.itemCount, MAX_COLS);
+        clusterX = anchorX - usedCols * (blockW + blockGap);
       }
 
       cl.slots.forEach(({ reg, col, row }) => {
         const icon = iconFor(reg.iconId);
         if(!icon) return;
-        const x = clusterX + col * (blockW + blockGap);
+        // Achteraf: col 0 is rechtsboven (dichts bij lijn), opvullen naar links
+        const effectiveCol = cl.actueel ? col : (Math.min(cl.itemCount, MAX_COLS) - 1 - col);
+        const x = clusterX + effectiveCol * (blockW + blockGap);
         const waaier = row === 1 ? col * 2 : 0;
         const y = row === 0 ? ROW1_TOP : ROW2_TOP + waaier;
 
