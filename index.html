@@ -2086,6 +2086,7 @@ async function syncPush(records) {
       body: JSON.stringify({ 
         action:'push', location:syncLocation, records,
         updates: REGS.filter(r => updatedIds.has(r.id)),
+        deletes: [...deletedIds],
         people: PEOPLE.map(p=>({id:p.id,name:p.name||'',initials:p.initials||'',room:p.room||'',color:p.color,goal:p.goal}))
       }),
       headers: { 'Content-Type': 'text/plain' }
