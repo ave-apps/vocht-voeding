@@ -1991,6 +1991,12 @@ document.getElementById('pm-delete').addEventListener('click', () => {
   }
   btn.dataset.confirming = '';
   btn.textContent = 'Verwijderen';
+  // Controleer of dit apparaat mag verwijderen
+  if(!isAdmin() && p.createdBy && p.createdBy !== DEVICE_ID){
+    showBanner('⛔ Alleen de aanmaker of admin mag deze strook verwijderen');
+    closePersonModal();
+    return;
+  }
   // Remove all regs for this person
   for(let i=REGS.length-1;i>=0;i--){ if(REGS[i].person===p.id) REGS.splice(i,1); }
   PEOPLE.splice(editingPi, 1);
@@ -2030,17 +2036,25 @@ document.getElementById('ap-save').addEventListener('click', () => {
   const initials = document.getElementById('ap-initials').value.trim().toUpperCase();
   const room = document.getElementById('ap-room').value.trim();
   if(!room){ document.getElementById('ap-room').focus(); showBanner('Kamernummer is verplicht'); return; }
+  // Blokkeer als kamernummer al bestaat (tenzij admin)
+  const roomLower = room.toLowerCase();
+  const bestaat = PEOPLE.some(p => (p.room||'').toLowerCase() === roomLower);
+  if(bestaat && !isAdmin()){
+    showBanner('⚠️ Kamer ' + room + ' bestaat al — alleen admin kan dit aanpassen');
+    return;
+  }
   const newPerson = {
-    id: 'p'+uid(), room, name: name||'', 
+    id: 'p'+uid(), room, name: name||'',
     initials: initials||room,
     color: document.getElementById('ap-color').value,
     photo: null, isMe: false,
-    goal: parseInt(document.getElementById('ap-goal').value)||1500
+    goal: parseInt(document.getElementById('ap-goal').value)||1500,
+    createdBy: DEVICE_ID
   };
   PEOPLE.push(newPerson);
   savePeople(); rebuildPersonSelect(); buildRows();
   addPersonOverlay.classList.remove('open');
-  showBanner(`✓ Kamer ${room} toegevoegd`);
+  showBanner('✓ Kamer ' + room + ' toegevoegd');
 });
 
 // ══════ GOOGLE SHEETS SYNC ════════════════════════════════════════
@@ -2143,7 +2157,7 @@ async function syncPull() {
         data.people.forEach(p => {
           if(!existingPids.has(p.id)) {
             PEOPLE.push({ id:p.id, name:p.name||'', initials:p.initials||'', room:p.room||'',
-              color:p.color, goal:p.goal||1500, photo:null });
+              color:p.color, goal:p.goal||1500, photo:null, createdBy:p.createdBy||'' });
             peopleAdded++;
           }
         });
@@ -2306,19 +2320,53 @@ document.getElementById('undo-btn-header').addEventListener('click', () => {
 })();
 
 loadSyncConfig();
-if(syncEnabled) { updateSyncIndicator('ok'); setTimeout(syncPull, 1500); }
+if(syncEnabled) {
+  updateSyncIndicator('ok');
+  // Pull altijd bij opstarten — ook op nieuwe apparaten zonder lokale data
+  setTimeout(syncPull, 1500);
+}
 
 // ══════ PERSIST ═══════════════════════════════════════════════════
 const DELETED_KEY = 'vochtreg_deleted_v1';
 const REGS_KEY='vochtreg_v1';
 const PEOPLE_KEY='vochtpeople_v1';
+const DEVICE_KEY = 'vochtapp_device_v1';
+const ADMIN_KEY  = 'vochtapp_admin_v1';
+
+// Device-ID: uniek per browser, aangemaakt bij eerste gebruik
+function getDeviceId(){
+  let id = localStorage.getItem(DEVICE_KEY);
+  if(!id){ id = 'dev_' + Math.random().toString(36).slice(2,11) + '_' + Date.now().toString(36); localStorage.setItem(DEVICE_KEY, id); }
+  return id;
+}
+const DEVICE_ID = getDeviceId();
+
+// Admin: sla je eigen device-ID op als admin via driedubbel-tap op sync-indicator
+// Of lees uit localStorage of je al admin bent op dit apparaat
+function isAdmin(){ return localStorage.getItem(ADMIN_KEY) === DEVICE_ID; }
+function maakAdminVanDitApparaat(){
+  localStorage.setItem(ADMIN_KEY, DEVICE_ID);
+  showBanner('✅ Dit apparaat is nu admin');
+}
+// Admin activeren: 5x tikken op de app-titel (h1)
+// (sync-indicator heeft eigen onclick voor syncModal)
+let _adminTapN=0, _adminTapT=null;
+document.addEventListener('DOMContentLoaded', ()=>{
+  const titleEl = document.querySelector('.header-top h1');
+  if(titleEl) titleEl.addEventListener('click', ()=>{
+    _adminTapN++; clearTimeout(_adminTapT);
+    _adminTapT = setTimeout(()=>_adminTapN=0, 1200);
+    if(_adminTapN >= 5){ _adminTapN=0; maakAdminVanDitApparaat(); }
+    // NB: de bestaande triple-tap reset (3x) blijft apart werken
+  });
+});
 
 function saveRegs(){
   try{localStorage.setItem(REGS_KEY,JSON.stringify(REGS));}catch(e){}
   console.log('[sync] saveRegs aangeroepen, syncEnabled='+syncEnabled+' records='+REGS.length);
   if(syncEnabled && !_suppressPush) syncPush(REGS);
 }
-function savePeople(){try{localStorage.setItem(PEOPLE_KEY,JSON.stringify(PEOPLE.map(p=>({id:p.id,name:p.name||'',initials:p.initials||'',room:p.room||'',color:p.color,photo:p.photo,goal:p.goal}))));}catch(e){}}
+function savePeople(){try{localStorage.setItem(PEOPLE_KEY,JSON.stringify(PEOPLE.map(p=>({id:p.id,name:p.name||'',initials:p.initials||'',room:p.room||'',color:p.color,photo:p.photo,goal:p.goal,createdBy:p.createdBy||''}))));}catch(e){}}
 
 function loadAll(){
   try{
@@ -2326,7 +2374,7 @@ function loadAll(){
     if(pr){
       const pd=JSON.parse(pr);
       PEOPLE.length=0;
-      pd.forEach(s=>{ PEOPLE.push({id:s.id,name:s.name||'',initials:s.initials||'',room:s.room||'',color:s.color,photo:s.photo||null,goal:s.goal||1500,isMe:s.isMe||false}); });
+      pd.forEach(s=>{ PEOPLE.push({id:s.id,name:s.name||'',initials:s.initials||'',room:s.room||'',color:s.color,photo:s.photo||null,goal:s.goal||1500,isMe:s.isMe||false,createdBy:s.createdBy||''}); });
     }
     const rr=localStorage.getItem(REGS_KEY);
     if(rr){const rd=JSON.parse(rr);rd.forEach(r=>REGS.push(r));}
