@@ -763,6 +763,15 @@ body {
       <button class="btn btn-ghost" id="sm-save">Opslaan</button>
       <button class="btn btn-danger" id="sm-disconnect" style="display:none">Ontkoppelen</button>
     </div>
+    <div id="sm-admin-section" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+      <div style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Apparaatbeheer</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:11px;color:var(--text-mid);font-family:monospace" id="sm-device-id"></span>
+        <span id="sm-admin-badge" style="display:none;font-size:10px;font-weight:700;color:#2a9c4a;background:#e8f8ee;padding:2px 8px;border-radius:20px">✓ admin</span>
+        <button id="sm-admin-btn" style="font-size:11px;padding:5px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-family:Nunito,sans-serif;font-weight:700;color:var(--text-mid)">Admin maken</button>
+        <button id="sm-admin-revoke" style="display:none;font-size:11px;padding:5px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-family:Nunito,sans-serif;font-weight:700;color:#c42a2a">Admin intrekken</button>
+      </div>
+    </div>
     <button id="sm-close" style="margin-top:10px;width:100%;padding:8px;border-radius:10px;border:1px solid var(--border);background:transparent;font-family:Nunito,sans-serif;font-size:12px;font-weight:700;cursor:pointer;color:var(--text-mid)">Sluiten</button>
   </div>
 </div>
@@ -2348,17 +2357,39 @@ function maakAdminVanDitApparaat(){
   localStorage.setItem(ADMIN_KEY, DEVICE_ID);
   showBanner('✅ Dit apparaat is nu admin');
 }
-// Admin activeren: 5x tikken op de app-titel (h1)
-// (sync-indicator heeft eigen onclick voor syncModal)
-let _adminTapN=0, _adminTapT=null;
+// Admin-knoppen in sync-modal
 document.addEventListener('DOMContentLoaded', ()=>{
-  const titleEl = document.querySelector('.header-top h1');
-  if(titleEl) titleEl.addEventListener('click', ()=>{
-    _adminTapN++; clearTimeout(_adminTapT);
-    _adminTapT = setTimeout(()=>_adminTapN=0, 1200);
-    if(_adminTapN >= 5){ _adminTapN=0; maakAdminVanDitApparaat(); }
-    // NB: de bestaande triple-tap reset (3x) blijft apart werken
+  const adminBtn    = document.getElementById('sm-admin-btn');
+  const revokeBtn   = document.getElementById('sm-admin-revoke');
+  const deviceLabel = document.getElementById('sm-device-id');
+  const adminBadge  = document.getElementById('sm-admin-badge');
+
+  function updateAdminUI(){
+    const admin = isAdmin();
+    if(deviceLabel) deviceLabel.textContent = 'ID: ' + DEVICE_ID.slice(0,16) + '…';
+    if(adminBadge)  adminBadge.style.display  = admin ? 'inline' : 'none';
+    if(adminBtn)    adminBtn.style.display     = admin ? 'none'   : '';
+    if(revokeBtn)   revokeBtn.style.display    = admin ? ''       : 'none';
+  }
+
+  if(adminBtn) adminBtn.addEventListener('click', ()=>{
+    maakAdminVanDitApparaat();
+    updateAdminUI();
   });
+  if(revokeBtn) revokeBtn.addEventListener('click', ()=>{
+    localStorage.removeItem(ADMIN_KEY);
+    showBanner('Admin-rechten ingetrokken');
+    updateAdminUI();
+  });
+
+  // Bijwerken elke keer dat de modal opent
+  const syncOverlayEl = document.getElementById('sync-modal-overlay');
+  if(syncOverlayEl){
+    const observer = new MutationObserver(()=>{
+      if(syncOverlayEl.classList.contains('open')) updateAdminUI();
+    });
+    observer.observe(syncOverlayEl, {attributes:true, attributeFilter:['class']});
+  }
 });
 
 function saveRegs(){
