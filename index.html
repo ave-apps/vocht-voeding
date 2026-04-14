@@ -1565,6 +1565,8 @@ document.getElementById('goals-save').addEventListener('click',()=>{
   });
   savePeople();buildRows();goalsOverlay.classList.remove('open');
   showBanner('Doelen opgeslagen ✓');
+  // Push bijgewerkte goals naar GAS zodat syncPull ze niet overschrijft
+  if(syncEnabled) syncPush(REGS);
 });
 
 // ══════ OVERVIEW ══════════════════════════════════════════════════
@@ -1986,6 +1988,8 @@ document.getElementById('pm-save').addEventListener('click', () => {
   if(p._pendingPhoto) { p.photo = p._pendingPhoto; delete p._pendingPhoto; }
   savePeople(); rebuildPersonSelect(); buildRows(); closePersonModal();
   showBanner(`✓ ${p.name} bijgewerkt`);
+  // Push bijgewerkte goals naar GAS
+  if(syncEnabled) syncPush(REGS);
 });
 
 document.getElementById('pm-delete').addEventListener('click', () => {
