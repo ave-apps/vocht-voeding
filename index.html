@@ -2172,6 +2172,11 @@ async function syncPull() {
             PEOPLE.push({ id:p.id, name:p.name||'', initials:p.initials||'', room:p.room||'',
               color:p.color, goal:(p.goal!=null&&!isNaN(p.goal)?p.goal:1500), photo:null, createdBy:p.createdBy||'' });
             peopleAdded++;
+          } else {
+            // Bestaande persoon: update room vanuit Sheet maar NIET goal
+            // (goal wordt lokaal beheerd en gepusht — niet overschrijven)
+            const local = PEOPLE.find(lp=>lp.id===p.id);
+            if(local && p.room !== undefined) local.room = p.room||local.room;
           }
         });
         if(peopleAdded > 0) { savePeople(); buildRows(); showBanner(peopleAdded+' nieuwe bewoners gesynchroniseerd'); }
