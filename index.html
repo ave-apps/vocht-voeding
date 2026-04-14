@@ -1961,7 +1961,7 @@ function openPersonModal(pi) {
   document.getElementById('pm-name').value     = p.name || '';
   document.getElementById('pm-initials').value = p.initials || '';
   document.getElementById('pm-color').value    = p.color;
-  document.getElementById('pm-goal').value     = p.goal || 1500;
+  document.getElementById('pm-goal').value     = (p.goal != null && !isNaN(p.goal)) ? p.goal : 1500;
   document.getElementById('pm-delete').style.display = p.isMe ? 'none' : '';
   personOverlay.classList.add('open');
   setTimeout(()=>document.getElementById('pm-name').focus(), 250);
